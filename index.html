@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Resimli River Raid Oyunu (Çoklu Dokunmatik)</title>
+<style>
+body {
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: center;
+min-height: 100vh;
+background-color: #f0f0f0;
+margin: 0;
+overflow: hidden;
+touch-action: none; /* Tarayıcının varsayılan dokunma eylemlerini engeller */
+}
+#oyunAlani {
+border: 2px solid #000;
+background-image: url('uzay.jpg');
+background-size: cover;
+background-repeat: no-repeat;
+}
+#kontrolAlani {
+display: none; /* Butonları kaldırıyoruz */
+width: 100%;
+justify-content: space-around;
+margin-top: 20px;
+}
+.kontrolButon {
+padding: 15px 30px;
+font-size: 18px;
+font-weight: bold;
+color: white;
+background-color: rgba(0, 0, 0, 0.5);
+border: none;
+border-radius: 10px;
+cursor: pointer;
+user-select: none;
+}
+#skorAlani {
+margin-top: 20px;
+font-size: 24px;
+font-weight: bold;
+color: white;
+text-shadow: 2px 2px black;
+}
+#hakAlani {
+margin-top: 10px;
+font-size: 18px;
+color: white;
+text-shadow: 1px 1px black;
+}
+</style>
+</head>
+<body>
+<canvas id="oyunAlani" width="480" height="640"></canvas>
+<div id="skorAlani">Skor: 0</div>
+<div id="hakAlani">Hak: 3</div>
+<div id="kontrolAlani">
+<button class="kontrolButon" id="solButon">Sol</button>
+<button class="kontrolButon" id="yukariButon">Yukarı</button>
+<button class="kontrolButon" id="asagiButon">Aşağı</button>
+<button class="kontrolButon" id="sagButon">Sağ</button>
+<button class="kontrolButon" id="atesButon">Ateş</button>
+</div>
+<audio id="atesSes" src="ates.wav"></audio>
+<audio id="vurulmaSes" src="vurulma.wav"></audio>
+<audio id="patlamaSes" src="patlama.wav"></audio>
+
+<script>
+const canvas = document.getElementById('oyunAlani');
+const ctx = canvas.getContext('2d');
+const skorAlani = document.getElementById('skorAlani');
+const hakAlani = document.getElementById('hakAlani');
+const atesSes = document.getElementById('atesSes');
+const vurulmaSes = document.getElementById('vurulmaSes');
+const patlamaSes = document.getElementById('patlamaSes');
+
+// Dokunma Durumları
+const aktifDokunmalar = {}; // Aktif dokunmaları parmak ID'sine göre saklar
+let hareketX = 0; // -1: sol, 0: dur, 1: sağ
+let hareketY = 0; // -1: yukarı, 0: dur, 1: aşağı
+let atesEdiliyor = false;
+let atesZamani = 0;
+const atesAraligi = 10; // Her 10 frame'de bir ateş edilebilir
+
+// Arka Plan
+const arkaPlanResmi = new Image();
+arkaPlanResmi.src = 'uzay.jpg';
+arkaPlanResmi.onload = () => {};
+
+// Oyuncu
+const oyuncuResmi = new Image();
+oyuncuResmi.src = 'ucak.png';
+const oyuncuBoyutu = 48;
+let oyuncuX = canvas.width / 2 - oyuncuBoyutu / 2;
+let oyuncuY = canvas.height - oyuncuBoyutu - 10;
+const oyuncuHiz = 5;
+let can = 3;
+
+// Mermi
+const mermiBoyutu = 10;
+const mermiHiz = 10;
+const mermiler = [];
+
+// Düşmanlar
+const dusmanResmi = new Image();
+dusmanResmi.src = 'dusman.png';
+const dusmanBoyutu = 60;
+const dusmanHiz = 2;
+const dusmanlar = [];
+const yeniDusmanAraligi = 100;
+let frameSayaci = 0;
+
+// Skor
+let skor = 0;
+
+function rastgele(min, max) {
+return Math.random() * (max - min) + min;
+}
+
+function yeniDusman() {
+const x = rastgele(0, canvas.width - dusmanBoyutu);
+const y = -dusmanBoyutu;
+dusmanlar.push({ x, y });
+}
+
+function mermiOlustur() {
+mermiler.push({
+x: oyuncuX + oyuncuBoyutu / 2 - mermiBoyutu / 2,
+y: oyuncuY - mermiBoyutu,
+});
+atesSes.currentTime = 0;
+atesSes.play();
+}
+
+function carpismaKontrol(nesne1, nesne2) {
+return (
+nesne1.x < nesne2.x + nesne2.boyut &&
+nesne1.x + nesne1.boyut > nesne2.x &&
+nesne1.y < nesne2.y + nesne2.boyut &&
+nesne1.y + nesne1.boyut > nesne2.y
+);
+}
+
+function oyunBitti() {
+alert('Oyun Bitti! Toplam Skorunuz: ' + skor);
+location.reload();
+}
+
+function oyuncuVuruldu() {
+can--;
+hakAlani.textContent = 'Hak: ' + can;
+patlamaSes.currentTime = 0;
+patlamaSes.play();
+
+if (can <= 0) {
+oyunBitti();
+} else {
+oyuncuX = canvas.width / 2 - oyuncuBoyutu / 2;
+oyuncuY = canvas.height - oyuncuBoyutu - 10;
+}
+}
+
+function oyunGuncelle() {
+ctx.drawImage(arkaPlanResmi, 0, 0, canvas.width, canvas.height);
+
+// Oyuncu Hareketi (Çoklu Dokunmatik)
+oyuncuX += hareketX * oyuncuHiz;
+oyuncuY += hareketY * oyuncuHiz;
+
+// Sınır Kontrolleri
+if (oyuncuX < 0) oyuncuX = 0;
+if (oyuncuX > canvas.width - oyuncuBoyutu) oyuncuX = canvas.width - oyuncuBoyutu;
+if (oyuncuY < canvas.height / 2) oyuncuY = canvas.height / 2;
+if (oyuncuY > canvas.height - oyuncuBoyutu - 10) oyuncuY = canvas.height - oyuncuBoyutu - 10;
+
+// Ateş Etme (Çoklu Dokunmatik - Belirli Aralıklarla)
+if (atesEdiliyor && frameSayaci % atesAraligi === 0) {
+mermiOlustur();
+}
+
+// Mermileri Güncelle
+for (let i = 0; i < mermiler.length; i++) {
+mermiler [i].y -= mermiHiz;
+ctx.fillStyle = 'yellow';
+ctx.fillRect(mermiler [i].x, mermiler [i].y, mermiBoyutu, mermiBoyutu);
+
+if (mermiler [i].y < 0) {
+mermiler.splice(i, 1);
+i--;
+}
+}
+
+// Yeni Düşman Oluştur
+frameSayaci++;
+if (frameSayaci % yeniDusmanAraligi === 0) {
+yeniDusman();
+}
+
+// Düşmanları Güncelle
+for (let i = 0; i < dusmanlar.length; i++) {
+dusmanlar [i].y += dusmanHiz;
+ctx.drawImage(dusmanResmi, dusmanlar [i].x, dusmanlar [i].y, dusmanBoyutu, dusmanBoyutu);
+
+if (carpismaKontrol({ x: oyuncuX, y: oyuncuY, boyut: oyuncuBoyutu }, { x: dusmanlar [i].x, y: dusmanlar [i].y, boyut: dusmanBoyutu })) {
+oyuncuVuruldu();
+dusmanlar.splice(i, 1);
+i--;
+} else if (dusmanlar [i].y > canvas.height) {
+dusmanlar.splice(i, 1);
+i--;
+} else {
+for (let j = 0; j < mermiler.length; j++) {
+if (mermiler [j] && dusmanlar [i] && carpismaKontrol({ x: mermiler [j].x, y: mermiler [j].y, boyut: mermiBoyutu }, { x: dusmanlar [i].x, y: dusmanlar [i].y, boyut: dusmanBoyutu })) {
+skor += 5;
+skorAlani.textContent = 'Skor: ' + skor;
+dusmanlar.splice(i, 1);
+mermiler.splice(j, 1);
+i--;
+vurulmaSes.currentTime = 0;
+vurulmaSes.play();
+break;
+}
+}
+}
+}
+
+ctx.drawImage(oyuncuResmi, oyuncuX, oyuncuY, oyuncuBoyutu, oyuncuBoyutu);
+
+requestAnimationFrame(oyunGuncelle);
+}
+
+// Dokunma Olayları
+canvas.addEventListener('touchstart', (e) => {
+e.preventDefault(); // Tarayıcının varsayılan dokunma davranışını engelle
+
+const rect = canvas.getBoundingClientRect();
+const dokunmalar = e.changedTouches;
+
+for (let i = 0; i < dokunmalar.length; i++) {
+const dokunma = dokunmalar [i];
+aktifDokunmalar [dokunma.identifier] = {
+x: dokunma.clientX - rect.left,
+y: dokunma.clientY - rect.top,
+};
+}
+
+guncelleDokunmaDurumu();
+});
+
+canvas.addEventListener('touchmove', (e) => {
+e.preventDefault();
+
+const rect = canvas.getBoundingClientRect();
+const dokunmalar = e.changedTouches;
+
+for (let i = 0; i < dokunmalar.length; i++) {
+const dokunma = dokunmalar [i];
+aktifDokunmalar [dokunma.identifier] = {
+x: dokunma.clientX - rect.left,
+y: dokunma.clientY - rect.top,
+};
+}
+
+guncelleDokunmaDurumu();
+});
+
+canvas.addEventListener('touchend', (e) => {
+e.preventDefault();
+
+const dokunmalar = e.changedTouches;
+for (let i = 0; i < dokunmalar.length; i++) {
+delete aktifDokunmalar [dokunmalar [i].identifier];
+}
+
+guncelleDokunmaDurumu();
+});
+
+canvas.addEventListener('touchcancel', (e) => {
+e.preventDefault();
+
+const dokunmalar = e.changedTouches;
+for (let i = 0; i < dokunmalar.length; i++) {
+delete aktifDokunmalar [dokunmalar [i].identifier];
+}
+
+guncelleDokunmaDurumu();
+});
+
+function guncelleDokunmaDurumu() {
+hareketX = 0;
+hareketY = 0;
+atesEdiliyor = false;
+
+let solSayac = 0;
+let sagSayac = 0;
+let yukariSayac = 0;
+let asagiSayac = 0;
+let atesSayac = 0;
+
+for (const id in aktifDokunmalar) {
+const dokunma = aktifDokunmalar [id];
+
+// Ekranın sol yarısı hareket için (daha hassas kontrol için bölgelere ayırılabilir)
+if (dokunma.x < canvas.width / 2) {
+if (dokunma.y < canvas.height / 3) {
+yukariSayac++;
+} else if (dokunma.y > 2 * canvas.height / 3) {
+asagiSayac++;
+}
+if (dokunma.x < canvas.width / 4) {
+solSayac++;
+} else {
+sagSayac++; // Sol yarıda ama daha sağda (çapraz hareket de olabilir)
+}
+}
+// Ekranın sağ yarısı ateş için
+else {
+atesSayac++;
+}
+}
+
+if (solSayac > sagSayac) hareketX = -1;
+else if (sagSayac > solSayac) hareketX = 1;
+else hareketX = 0;
+
+if (yukariSayac > asagiSayac) hareketY = -1;
+else if (asagiSayac > yukariSayac) hareketY = 1;
+else hareketY = 0;
+
+atesEdiliyor = atesSayac > 0;
+}
+
+// Resimler yüklendikten sonra oyunu başlat
+let resimlerYuklendi = 0;
+const toplamResim = 3;
+
+oyuncuResmi.onload = () => {
+resimlerYuklendi++;
+if (resimlerYuklendi === toplamResim) {
+oyunGuncelle();
+}
+};
+
+dusmanResmi.onload = () => {
+resimlerYuklendi++;
+if (resimlerYuklendi === toplamResim) {
+oyunGuncelle();
+}
+};
+
+arkaPlanResmi.onload = () => {
+resimlerYuklendi++;
+if (resimlerYuklendi === toplamResim) {
+oyunGuncelle();
+}
+};
+</script>
+</body>
+</html>

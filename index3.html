@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Resimli River Raid Oyunu</title>
+<style>
+body {
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: center;
+min-height: 100vh;
+background-color: #f0f0f0;
+margin: 0;
+}
+#oyunAlani {
+border: 2px solid #000;
+/* background-color: #87CEEB; /* Açık mavi (nehir rengi) */
+background-image: url('uzay.jpg'); /* Uzay resmi arka planı */
+background-size: cover;
+background-repeat: no-repeat;
+}
+#skorAlani {
+    margin-top: 20px;
+    font-size: 24px;
+    font-weight: bold;
+    color: white; /* Skor yazısı rengi */
+    text-shadow: 2px 2px black; /* Gölge efekti */
+}
+
+#hakAlani {
+    margin-top: 10px;
+    font-size: 18px;
+    color: white;
+    text-shadow: 1px 1px black;
+}
+Use code with caution.
+</style>
+</head>
+<body>
+<canvas id="oyunAlani" width="480" height="640"></canvas>
+<div id="skorAlani">Skor: 0</div>
+<div id="hakAlani">Hak: 3</div>
+<audio id="atesSes" src="ates.wav"></audio>
+<audio id="vurulmaSes" src="vurulma.wav"></audio>
+<audio id="patlamaSes" src="patlama.wav"></audio>
+<script>
+const canvas = document.getElementById('oyunAlani');
+const ctx = canvas.getContext('2d');
+const skorAlani = document.getElementById('skorAlani');
+const hakAlani = document.getElementById('hakAlani');
+const atesSes = document.getElementById('atesSes');
+const vurulmaSes = document.getElementById('vurulmaSes');
+const patlamaSes = document.getElementById('patlamaSes');
+
+// Arka Plan
+const arkaPlanResmi = new Image();
+arkaPlanResmi.src = 'uzay.jpg'; // Uzay resmi yolu
+arkaPlanResmi.onload = () => {
+// Oyun döngüsünde arka planı çizmek için kullanılacak.
+};
+
+// Oyuncu
+const oyuncuResmi = new Image();
+oyuncuResmi.src = 'ucak.png'; // Oyuncu uçağı resminin yolu
+const oyuncuBoyutu = 48; // Artırılmış boyut
+let oyuncuX = canvas.width / 2 - oyuncuBoyutu / 2;
+let oyuncuY = canvas.height - oyuncuBoyutu - 10;
+const oyuncuHiz = 5;
+let can = 3;
+
+// Mermi
+const mermiBoyutu = 10;
+const mermiHiz = 10;
+const mermiler = [];
+
+// Düşmanlar
+const dusmanResmi = new Image();
+dusmanResmi.src = 'dusman.png'; // Düşman uçağı resminin yolu
+const dusmanBoyutu = 60; // Artırılmış boyut
+const dusmanHiz = 2;
+const dusmanlar = [];
+const yeniDusmanAraligi = 100; // Her 100 frame'de bir yeni düşman
+let frameSayaci = 0;
+
+// Skor
+let skor = 0;
+
+// Tuş Kontrolleri
+const tuslar = {};
+document.addEventListener('keydown', (e) => tuslar [e.key] = true);
+document.addEventListener('keyup', (e) => tuslar [e.key] = false);
+
+function rastgele(min, max) {
+return Math.random() * (max - min) + min;
+}
+
+function yeniDusman() {
+const x = rastgele(0, canvas.width - dusmanBoyutu);
+const y = -dusmanBoyutu;
+dusmanlar.push({ x, y });
+}
+
+function mermiOlustur() {
+mermiler.push({
+x: oyuncuX + oyuncuBoyutu / 2 - mermiBoyutu / 2,
+y: oyuncuY - mermiBoyutu,
+});
+// Ateş sesi çal
+atesSes.currentTime = 0; // Her ateş edildiğinde sesi baştan başlat
+atesSes.play();
+}
+
+function carpismaKontrol(nesne1, nesne2) {
+return (
+nesne1.x < nesne2.x + nesne2.boyut &&
+nesne1.x + nesne1.boyut > nesne2.x &&
+nesne1.y < nesne2.y + nesne2.boyut &&
+nesne1.y + nesne1.boyut > nesne2.y
+);
+}
+
+function oyunBitti() {
+alert('Oyun Bitti! Toplam Skorunuz: ' + skor);
+location.reload();
+}
+
+function oyuncuVuruldu() {
+can--;
+hakAlani.textContent = 'Hak: ' + can;
+// Patlama sesi çal
+patlamaSes.currentTime = 0;
+patlamaSes.play();
+
+if (can <= 0) {
+oyunBitti();
+} else {
+// Oyuncuyu kısa bir süre görünmez yapabilir veya başlangıç pozisyonuna alabilirsiniz.
+oyuncuX = canvas.width / 2 - oyuncuBoyutu / 2;
+oyuncuY = canvas.height - oyuncuBoyutu - 10;
+}
+}
+
+function oyunGuncelle() {
+// Arka planı çiz
+ctx.drawImage(arkaPlanResmi, 0, 0, canvas.width, canvas.height);
+
+// Oyuncu Hareketi
+if (tuslar['ArrowLeft'] && oyuncuX > 0) oyuncuX -= oyuncuHiz;
+if (tuslar['ArrowRight'] && oyuncuX < canvas.width - oyuncuBoyutu) oyuncuX += oyuncuHiz;
+if (tuslar['ArrowUp'] && oyuncuY > canvas.height / 2) oyuncuY -= oyuncuHiz;
+if (tuslar['ArrowDown'] && oyuncuY < canvas.height - oyuncuBoyutu - 10) oyuncuY += oyuncuHiz;
+
+// Ateş Etme
+if (tuslar[' '] || tuslar['Spacebar']) {
+mermiOlustur();
+tuslar[' '] = false; // Tuş basılı tutulunca sürekli ateş etmeyi engelle
+tuslar['Spacebar'] = false;
+}
+
+// Mermileri Güncelle
+for (let i = 0; i < mermiler.length; i++) {
+mermiler [i].y -= mermiHiz;
+ctx.fillStyle = 'yellow';
+ctx.fillRect(mermiler [i].x, mermiler [i].y, mermiBoyutu, mermiBoyutu);
+
+// Mermi sınır dışına çıktıysa sil
+if (mermiler [i].y < 0) {
+mermiler.splice(i, 1);
+i--;
+}
+}
+
+// Yeni Düşman Oluştur
+frameSayaci++;
+if (frameSayaci % yeniDusmanAraligi === 0) {
+yeniDusman();
+}
+
+// Düşmanları Güncelle
+for (let i = 0; i < dusmanlar.length; i++) {
+dusmanlar [i].y += dusmanHiz;
+// Düşmanı Çiz (Resim ile)
+ctx.drawImage(dusmanResmi, dusmanlar [i].x, dusmanlar [i].y, dusmanBoyutu, dusmanBoyutu);
+
+// Çarpışma Kontrolü (Oyuncu - Düşman)
+if (carpismaKontrol({ x: oyuncuX, y: oyuncuY, boyut: oyuncuBoyutu }, { x: dusmanlar [i].x, y: dusmanlar [i].y, boyut: dusmanBoyutu })) {
+oyuncuVuruldu();
+dusmanlar.splice(i, 1); // Çarpışan düşmanı sil
+i--;
+} else if (dusmanlar [i].y > canvas.height) {
+dusmanlar.splice(i, 1);
+i--;
+} else {
+// Mermi - Düşman Çarpışma Kontrolü
+for (let j = 0; j < mermiler.length; j++) {
+// Çarpışma kontrolü yapmadan önce elemanların tanımlı olduğundan emin olun
+if (mermiler [j] && dusmanlar [i] && carpismaKontrol({ x: mermiler [j].x, y: mermiler [j].y, boyut: mermiBoyutu }, { x: dusmanlar [i].x, y: dusmanlar [i].y, boyut: dusmanBoyutu })) {
+skor += 5; // Skor artışı
+skorAlani.textContent = 'Skor: ' + skor; // Skoru güncelle
+dusmanlar.splice(i, 1);
+mermiler.splice(j, 1);
+i--; // Dizi boyutları değiştiği için indeksleri ayarla
+// Vurulma sesi çal
+vurulmaSes.currentTime = 0;
+vurulmaSes.play();
+break; // Bir mermi bir düşmanı vurduktan sonra iç döngüden çık
+}
+}
+}
+}
+
+// Oyuncuyu Çiz (Resim ile)
+ctx.drawImage(oyuncuResmi, oyuncuX, oyuncuY, oyuncuBoyutu, oyuncuBoyutu);
+
+requestAnimationFrame(oyunGuncelle);
+}
+
+// Resimler yüklendikten sonra oyunu başlat
+let resimlerYuklendi = 0;
+const toplamResim = 3; // Oyuncu, düşman ve arka plan resmi
+
+oyuncuResmi.onload = () => {
+resimlerYuklendi++;
+if (resimlerYuklendi === toplamResim) {
+oyunGuncelle();
+}
+};
+
+dusmanResmi.onload = () => {
+resimlerYuklendi++;
+if (resimlerYuklendi === toplamResim) {
+oyunGuncelle();
+}
+};
+
+arkaPlanResmi.onload = () => {
+resimlerYuklendi++;
+if (resimlerYuklendi === toplamResim) {
+oyunGuncelle();
+}
+};
+</script>
+</body>
+</html>
